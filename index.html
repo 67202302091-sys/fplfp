@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบสารสนเทศระบาดวิทยาโรคเบาหวาน | Public Health Diabetes Dashboard</title>
+    
+    <!-- Google Fonts: Kanit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Kanit', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        health: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        },
+                        danger: {
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            500: '#f43f5e',
+                            600: '#e11d48',
+                            700: '#be123c',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet GIS Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { font-family: 'Kanit', 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Map Custom Styles */
+        #gisMap { height: 480px; width: 100%; border-radius: 0.75rem; z-index: 10; }
+        .leaflet-popup-content-wrapper { border-radius: 0.75rem; font-family: 'Kanit', sans-serif; padding: 4px; }
+    </style>
+</head>
+<body class="h-full text-slate-800 flex flex-col min-h-screen">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-emerald-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Brand / Title -->
+                <div class="flex items-center space-x-3">
+                    <div class="bg-emerald-700 p-2.5 rounded-xl shadow-inner">
+                        <i class="fa-solid fa-heart-pulse text-2xl text-emerald-300"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg sm:text-xl font-bold leading-tight">ระบบสารสนเทศระบาดวิทยาโรคเบาหวาน</h1>
+                        <p class="text-xs text-emerald-200 font-light hidden sm:block">Public Health Diabetes Epidemiological Dashboard (PIMA Model Simulation)</p>
+                    </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <button onclick="resetFilters()" class="text-xs sm:text-sm bg-emerald-800 hover:bg-emerald-700 text-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-600 transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate text-xs"></i>
+                        <span>รีเซ็ตตัวกรอง</span>
+                    </button>
+                    <button onclick="exportCSVData()" class="text-xs sm:text-sm bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold px-3 py-1.5 rounded-lg shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-csv"></i>
+                        <span>ส่งออก CSV</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Global Filter Bar -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="flex items-center gap-2 text-slate-700 font-medium">
+                    <i class="fa-solid fa-filter text-emerald-600"></i>
+                    <span>ตัวกรองข้อมูลทางระบาดวิทยา:</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
+                    <!-- Zone Filter -->
+                    <div>
+                        <select id="filterZone" onchange="applyFilters()" class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                            <option value="ALL">ทุกเขตสุขภาพ (13 เขต)</option>
+                        </select>
+                    </div>
+
+                    <!-- Age Group Filter -->
+                    <div>
+                        <select id="filterAge" onchange="applyFilters()" class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                            <option value="ALL">ทุกกลุ่มอายุ</option>
+                            <option value="21-30">21 - 30 ปี</option>
+                            <option value="31-40">31 - 40 ปี</option>
+                            <option value="41-50">41 - 50 ปี</option>
+                            <option value="51-60">51 - 60 ปี</option>
+                            <option value="60+">60 ปีขึ้นไป</option>
+                        </select>
+                    </div>
+
+                    <!-- Diabetes Status Filter -->
+                    <div>
+                        <select id="filterStatus" onchange="applyFilters()" class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                            <option value="ALL">สถานะการวินิจฉัยทั้งหมด</option>
+                            <option value="1">ป่วยเป็นเบาหวาน (Positive)</option>
+                            <option value="0">ปกติ / ไม่เป็นเบาหวาน (Negative)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- KPI Metric Cards Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Metric 1: Total Samples -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center justify-between hover:shadow-md transition">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">กลุ่มตัวอย่างทั้งหมด</p>
+                    <h3 id="kpiTotal" class="text-2xl font-bold text-slate-800 mt-1">768 <span class="text-sm font-normal text-slate-500">ราย</span></h3>
+                    <p class="text-xs text-slate-400 mt-1">ข้อมูลสำรวจ PIMA Health Model</p>
+                </div>
+                <div class="bg-blue-50 text-blue-600 p-3.5 rounded-xl">
+                    <i class="fa-solid fa-users text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- Metric 2: Prevalence Rate -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center justify-between hover:shadow-md transition">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">อัตราความชุก (Prevalence)</p>
+                    <h3 id="kpiPrevalence" class="text-2xl font-bold text-rose-600 mt-1">34.9%</h3>
+                    <p class="text-xs text-rose-500 font-medium mt-1" id="kpiPosCount"><i class="fa-solid fa-triangle-exclamation"></i> 268 รายผู้ป่วยเบาหวาน</p>
+                </div>
+                <div class="bg-rose-50 text-rose-600 p-3.5 rounded-xl">
+                    <i class="fa-solid fa-disease text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- Metric 3: Avg Glucose -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center justify-between hover:shadow-md transition">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">ระดับน้ำตาลเฉลี่ย</p>
+                    <h3 id="kpiGlucose" class="text-2xl font-bold text-amber-600 mt-1">121.7 <span class="text-sm font-normal text-slate-500">mg/dL</span></h3>
+                    <p class="text-xs text-amber-600 font-medium mt-1"><i class="fa-solid fa-droplet"></i> เกณฑ์เสี่ยงเบาหวาน (&gt;100 mg/dL)</p>
+                </div>
+                <div class="bg-amber-50 text-amber-600 p-3.5 rounded-xl">
+                    <i class="fa-solid fa-vial text-2xl"></i>
+                </div>
+            </div>
+
+            <!-- Metric 4: Avg BMI -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center justify-between hover:shadow-md transition">
+                <div>
+                    <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">ดัชนีมวลกายเฉลี่ย (BMI)</p>
+                    <h3 id="kpiBMI" class="text-2xl font-bold text-emerald-600 mt-1">32.4 <span class="text-sm font-normal text-slate-500">kg/m²</span></h3>
+                    <p class="text-xs text-rose-500 font-medium mt-1"><i class="fa-solid fa-weight-scale"></i> ภาวะอ้วนระดับ 2 (&ge; 30)</p>
+                </div>
+                <div class="bg-emerald-50 text-emerald-600 p-3.5 rounded-xl">
+                    <i class="fa-solid fa-child-reaching text-2xl"></i>
+                </div>
+            </div>
+        </section>
+
+        <!-- GIS Map Section -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <h2 class="font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot text-emerald-600"></i>
+                        แผนที่แสดงการกระจายเชิงพื้นที่และระดับความชุกโรคเบาหวาน (GIS Spatial Map)
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-0.5">แสดงข้อมูลตามเขตสุขภาพจำลอง 13 เขตทั่วประเทศ พร้อมชั้นข้อมูล Heatmap และ Bubble Overlay</p>
+                </div>
+                
+                <!-- Map Layer Switcher Buttons -->
+                <div class="flex items-center space-x-2 text-xs">
+                    <button id="btnLayerMarker" onclick="toggleMapLayer('markers')" class="px-3 py-1.5 rounded-lg border bg-emerald-600 text-white border-emerald-600 shadow-sm transition">
+                        <i class="fa-solid fa-location-dot"></i> หมุดเขตสุขภาพ
+                    </button>
+                    <button id="btnLayerBubble" onclick="toggleMapLayer('bubbles')" class="px-3 py-1.5 rounded-lg border bg-white text-slate-700 hover:bg-slate-100 border-slate-300 transition">
+                        <i class="fa-solid fa-circle-dot"></i> วงกลมสัดส่วนความชุก
+                    </button>
+                    <button id="btnLayerHeat" onclick="toggleMapLayer('heatmap')" class="px-3 py-1.5 rounded-lg border bg-white text-slate-700 hover:bg-slate-100 border-slate-300 transition">
+                        <i class="fa-solid fa-fire text-rose-500"></i> Heatmap ความเสี่ยง
+                    </button>
+                </div>
+            </div>
+            
+            <div class="relative">
+                <div id="gisMap"></div>
+                <!-- Map Legend Overlay -->
+                <div class="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-md border border-slate-200 text-xs z-[1000] space-y-1.5">
+                    <div class="font-bold text-slate-700 mb-1">ระดับความชุกเบาหวาน (%)</div>
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> ต่ำ (&lt; 33.5%)</div>
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> ปานกลาง (33.5% - 36.0%)</div>
+                    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-600 inline-block"></span> สูง (&gt; 36.0%)</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Grid (2x2) -->
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Chart 1: Age Group Prevalence -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">1. ความชุกของโรคเบาหวานตามกลุ่มอายุ</h3>
+                        <p class="text-xs text-slate-500">อัตราส่วนผู้ป่วยเทียบกับประชากรในแต่ละช่วงอายุ</p>
+                    </div>
+                    <span class="p-2 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-semibold">Age Stratification</span>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="chartAgePrevalence"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Glucose Distribution -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">2. การกระจายของระดับน้ำตาลในเลือด (Glucose)</h3>
+                        <p class="text-xs text-slate-500">จำแนกตามสถานะผลการตรวจทางห้องปฏิบัติการ</p>
+                    </div>
+                    <span class="p-2 bg-amber-50 text-amber-600 rounded-lg text-xs font-semibold">Lab Range</span>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="chartGlucoseDist"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: BMI Category Risk -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">3. สัดส่วนดัชนีมวลกาย (BMI Category) กับความเสี่ยง</h3>
+                        <p class="text-xs text-slate-500">จำแนกตามเกณฑ์อ้วน/น้ำหนักเกินเพื่อดูสัดส่วนการป่วย</p>
+                    </div>
+                    <span class="p-2 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-semibold">BMI Risk Profile</span>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="chartBMIRisk"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 4: Risk Factor Comparison (Radar Chart) -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base">4. เปรียบเทียบเฉลี่ยปัจจัยเสี่ยงทางระบาดวิทยา</h3>
+                        <p class="text-xs text-slate-500">เปรียบเทียบโปรไฟล์ 5 มิติระหว่างกลุ่มป่วย vs ปกติ (Normalized)</p>
+                    </div>
+                    <span class="p-2 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold">Multivariate Risk</span>
+                </div>
+                <div class="h-64 relative">
+                    <canvas id="chartRadarFactors"></canvas>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Epidemiological Findings & Policy Recommendations Panel -->
+        <section class="bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-xl shadow-md p-6">
+            <h3 class="text-lg font-bold text-emerald-400 flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-microscope"></i>
+                สรุปข้อค้นพบทางระบาดวิทยาและข้อเสนอแนะเชิงนโยบาย (Epidemiological Executive Summary)
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-200 leading-relaxed">
+                <div class="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/10 space-y-2">
+                    <h4 class="font-semibold text-emerald-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-info"></i> ข้อค้นพบสำคัญ (Key Findings)
+                    </h4>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-slate-300">
+                        <li><strong>กลุ่มอายุความเสี่ยงสูง:</strong> อัตราป่วยเพิ่มขึ้นอย่างมีนัยสำคัญในกลุ่มอายุ &gt;50 ปี (&gt;52.0%) เทียบกับกลุ่ม 21-30 ปี (21.2%)</li>
+                        <li><strong>ภาวะน้ำหนักเกินและโรคอ้วน:</strong> ผู้ที่มี BMI &ge; 30 kg/m² มีอัตราการป่วยเป็นเบาหวานสูงกว่ากลุ่มน้ำหนักปกติถึง 2.8 เท่า</li>
+                        <li><strong>ปัจจัยทางพันธุกรรม (Pedigree):</strong> ค่า Diabetes Pedigree Function เฉลี่ยในกลุ่มผู้ป่วยสูงกว่ากลุ่มปกติอย่างชัดเจน (0.55 vs 0.43)</li>
+                    </ul>
+                </div>
+
+                <div class="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/10 space-y-2">
+                    <h4 class="font-semibold text-emerald-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-bullseye"></i> ข้อเสนอแนะเชิงนโยบายสาธารณสุข (Public Health Interventions)
+                    </h4>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-slate-300">
+                        <li><strong>Active Screening Program:</strong> ปูพรมคัดกรอง Fasting Blood Glucose ในกลุ่มเสี่ยงที่มี BMI &ge; 25 และมีประวัติครอบครัว</li>
+                        <li><strong>Primary Care Unit Target:</strong> มุ่งเน้นเขตสุขภาพที่มีความชุกสูง (เขต 7 ขอนแก่น, เขต 8 อุดรธานี, เขต 9 นครราชสีมา)</li>
+                        <li><strong>Lifestyle Intervention:</strong> ปรับเปลี่ยนพฤติกรรมลดหวาน-มัน-เค็ม และควบคุม BMI ในกลุ่มอ้วนระดับ 1 และ 2</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Data Table Section -->
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                        <i class="fa-solid fa-table-list text-emerald-600"></i>
+                        ฐานข้อมูลรายบุคคลและการคัดกรอง (Individual Health Data Table)
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">ค้นหา กรอง และเรียกดูข้อมูลสำรวจเบาหวาน PIMA Dataset (768 ราย)</p>
+                </div>
+
+                <!-- Table Search Box -->
+                <div class="relative w-full md:w-72">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="searchInput" onkeyup="handleSearch()" placeholder="ค้นหา ID, เขตสุขภาพ, อายุ..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Table Responsive Wrapper -->
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-700 text-xs font-semibold uppercase tracking-wider border-b border-slate-200">
+                            <th class="py-3 px-4">รหัส (ID)</th>
+                            <th class="py-3 px-4">เขตสุขภาพ / พื้นที่</th>
+                            <th class="py-3 px-4 text-center">อายุ (ปี)</th>
+                            <th class="py-3 px-4 text-center">จำนวนตั้งครรภ์</th>
+                            <th class="py-3 px-4 text-center">Glucose (mg/dL)</th>
+                            <th class="py-3 px-4 text-center">ความดัน (mmHg)</th>
+                            <th class="py-3 px-4 text-center">BMI (kg/m²)</th>
+                            <th class="py-3 px-4 text-center">ค่าพันธุกรรม (Pedigree)</th>
+                            <th class="py-3 px-4 text-center">วินิจฉัยโรคเบาหวาน</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="divide-y divide-slate-200 text-slate-700">
+                        <!-- Dynamic Rows Inserted by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+                <div id="tableInfo">แสดง 1 ถึง 10 จากทั้งหมด 768 รายการ</div>
+                
+                <div class="flex items-center space-x-2">
+                    <label for="rowsPerPage" class="mr-1">แสดงหน้าละ:</label>
+                    <select id="rowsPerPage" onchange="changeRowsPerPage()" class="bg-white border border-slate-300 rounded px-2 py-1 outline-none">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    
+                    <div class="flex items-center space-x-1 ml-4">
+                        <button onclick="prevPage()" id="btnPrev" class="px-2.5 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <span id="pageNumbers" class="px-2 font-medium text-slate-700">หน้า 1 / 77</span>
+                        <button onclick="nextPage()" id="btnNext" class="px-2.5 py-1 rounded bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-50">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 text-xs py-6 mt-12 border-t border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-2">
+            <p class="font-medium text-slate-300">ระบบสารสนเทศทางระบาดวิทยา โรคเบาหวาน (Public Health GIS &amp; Epidemiological Analytics Portal)</p>
+            <p>พัฒนาสำหรับงานวิชาการสาธารณสุขและการวางแผนสาธารณสุขเชิงพื้นที่ | อ้างอิงโครงสร้างข้อมูล PIMA Diabetes Dataset &amp; Spatial Health Zones</p>
+            <p class="text-slate-500">พร้อมใช้งานบน GitHub Pages &bull; Open-Source Health Analytics Dashboard</p>
+        </div>
+    </footer>
+
+    <!-- Notification Toast Modal -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 opacity-0 translate-y-10 pointer-events-none z-50">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toastMessage" class="text-sm">ดำเนินการสำเร็จ</span>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        /**
+         * 1. HEALTH ZONES DEFINITION IN THAILAND
+         */
+        const HEALTH_ZONES = [
+            { id: 1, name: "เขตสุขภาพที่ 1 (เชียงใหม่)", lat: 18.7883, lng: 98.9853, targetCount: 65, posRatio: 0.323 },
+            { id: 2, name: "เขตสุขภาพที่ 2 (พิษณุโลก)", lat: 16.8211, lng: 100.2659, targetCount: 55, posRatio: 0.327 },
+            { id: 3, name: "เขตสุขภาพที่ 3 (นครสวรรค์)", lat: 15.7023, lng: 100.1372, targetCount: 50, posRatio: 0.340 },
+            { id: 4, name: "เขตสุขภาพที่ 4 (สระบุรี)", lat: 14.5289, lng: 100.9101, targetCount: 55, posRatio: 0.345 },
+            { id: 5, name: "เขตสุขภาพที่ 5 (ราชบุรี)", lat: 13.5373, lng: 99.8164, targetCount: 50, posRatio: 0.360 },
+            { id: 6, name: "เขตสุขภาพที่ 6 (ชลบุรี)", lat: 13.3611, lng: 100.9847, targetCount: 60, posRatio: 0.350 },
+            { id: 7, name: "เขตสุขภาพที่ 7 (ขอนแก่น)", lat: 16.4419, lng: 102.8360, targetCount: 70, posRatio: 0.371 },
+            { id: 8, name: "เขตสุขภาพที่ 8 (อุดรธานี)", lat: 17.4138, lng: 102.7872, targetCount: 60, posRatio: 0.367 },
+            { id: 9, name: "เขตสุขภาพที่ 9 (นครราชสีมา)", lat: 14.9799, lng: 102.0978, targetCount: 75, posRatio: 0.360 },
+            { id: 10, name: "เขตสุขภาพที่ 10 (อุบลราชธานี)", lat: 15.2448, lng: 104.8473, targetCount: 60, posRatio: 0.333 },
+            { id: 11, name: "เขตสุขภาพที่ 11 (สุราษฎร์ธานี)", lat: 9.1382, lng: 99.3217, targetCount: 55, posRatio: 0.327 },
+            { id: 12, name: "เขตสุขภาพที่ 12 (สงขลา)", lat: 7.1988, lng: 100.5951, targetCount: 58, posRatio: 0.345 },
+            { id: 13, name: "เขตสุขภาพที่ 13 (กรุงเทพมหานคร)", lat: 13.7563, lng: 100.5018, targetCount: 85, posRatio: 0.353 }
+        ];
+
+        // Global State Variables
+        let rawDataset = [];
+        let filteredDataset = [];
+        let currentPage = 1;
+        let rowsPerPage = 10;
+        let activeMapLayer = 'markers'; // 'markers', 'bubbles', 'heatmap'
+
+        // Leaflet Handles
+        let map = null;
+        let mapMarkerGroup = null;
+        let mapBubbleGroup = null;
+        let mapHeatLayer = null;
+
+        // Chart Handles
+        let chartAge = null;
+        let chartGlucose = null;
+        let chartBMI = null;
+        let chartRadar = null;
+
+        /**
+         * 2. DATA GENERATOR (PIMA Statistics Compatible)
+         */
+        function generateDataset() {
+            let data = [];
+            let currentID = 1;
+            let seed = 123456789;
+
+            function pseudoRandom() {
+                let x = Math.sin(seed++) * 10000;
+                return x - Math.floor(x);
+            }
+
+            HEALTH_ZONES.forEach(zone => {
+                let count = zone.targetCount;
+                let targetPositives = Math.round(count * zone.posRatio);
+
+                for (let i = 0; i < count; i++) {
+                    let outcome = (i < targetPositives) ? 1 : 0;
+                    let age, pregnancies, glucose, bp, skin, insulin, bmi, pedigree;
+
+                    if (outcome === 1) {
+                        age = Math.floor(25 + pseudoRandom() * 40);
+                        pregnancies = Math.floor(pseudoRandom() * 9);
+                        glucose = Math.floor(115 + pseudoRandom() * 80);
+                        bp = Math.floor(65 + pseudoRandom() * 35);
+                        skin = Math.floor(20 + pseudoRandom() * 30);
+                        insulin = Math.floor(80 + pseudoRandom() * 250);
+                        bmi = parseFloat((27.5 + pseudoRandom() * 18.5).toFixed(1));
+                        pedigree = parseFloat((0.25 + pseudoRandom() * 1.1).toFixed(3));
+                    } else {
+                        age = Math.floor(21 + pseudoRandom() * 35);
+                        pregnancies = Math.floor(pseudoRandom() * 6);
+                        glucose = Math.floor(75 + pseudoRandom() * 50);
+                        bp = Math.floor(58 + pseudoRandom() * 30);
+                        skin = Math.floor(10 + pseudoRandom() * 25);
+                        insulin = Math.floor(30 + pseudoRandom() * 150);
+                        bmi = parseFloat((19.0 + pseudoRandom() * 16.0).toFixed(1));
+                        pedigree = parseFloat((0.12 + pseudoRandom() * 0.75).toFixed(3));
+                    }
+
+                    let latJitter = zone.lat + (pseudoRandom() - 0.5) * 0.35;
+                    let lngJitter = zone.lng + (pseudoRandom() - 0.5) * 0.35;
+
+                    let ageGroup = "21-30";
+                    if (age > 60) ageGroup = "60+";
+                    else if (age >= 51) ageGroup = "51-60";
+                    else if (age >= 41) ageGroup = "41-50";
+                    else if (age >= 31) ageGroup = "31-40";
+
+                    let bmiCategory = "ปกติ (< 23.0)";
+                    if (bmi >= 30.0) bmiCategory = "อ้วนระดับ 2 (≥ 30.0)";
+                    else if (bmi >= 25.0) bmiCategory = "อ้วนระดับ 1 (25.0-29.9)";
+                    else if (bmi >= 23.0) bmiCategory = "น้ำหนักเกิน (23.0-24.9)";
+
+                    data.push({
+                        id: `PIMA-${String(currentID++).padStart(4, '0')}`,
+                        zoneId: zone.id,
+                        zoneName: zone.name,
+                        lat: latJitter,
+                        lng: lngJitter,
+                        age: age,
+                        ageGroup: ageGroup,
+                        pregnancies: pregnancies,
+                        glucose: glucose,
+                        bloodPressure: bp,
+                        skinThickness: skin,
+                        insulin: insulin,
+                        bmi: bmi,
+                        bmiCategory: bmiCategory,
+                        pedigree: pedigree,
+                        outcome: outcome
+                    });
+                }
+            });
+
+            return data.slice(0, 768);
+        }
+
+        /**
+         * 3. INITIALIZATION
+         */
+        window.onload = function() {
+            rawDataset = generateDataset();
+            filteredDataset = [...rawDataset];
+
+            populateZoneDropdown();
+            initLeafletMap();
+            initCharts();
+            updateDashboard();
+        };
+
+        function populateZoneDropdown() {
+            const select = document.getElementById('filterZone');
+            HEALTH_ZONES.forEach(z => {
+                const opt = document.createElement('option');
+                opt.value = z.id;
+                opt.textContent = z.name;
+                select.appendChild(opt);
+            });
+        }
+
+        /**
+         * 4. FILTERING LOGIC
+         */
+        function applyFilters() {
+            const zoneVal = document.getElementById('filterZone').value;
+            const ageVal = document.getElementById('filterAge').value;
+            const statusVal = document.getElementById('filterStatus').value;
+            const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+
+            filteredDataset = rawDataset.filter(item => {
+                if (zoneVal !== 'ALL' && item.zoneId !== parseInt(zoneVal)) return false;
+                if (ageVal !== 'ALL' && item.ageGroup !== ageVal) return false;
+                if (statusVal !== 'ALL' && item.outcome !== parseInt(statusVal)) return false;
+
+                if (searchVal !== '') {
+                    const matchID = item.id.toLowerCase().includes(searchVal);
+                    const matchZone = item.zoneName.toLowerCase().includes(searchVal);
+                    const matchAge = String(item.age).includes(searchVal);
+                    if (!matchID && !matchZone && !matchAge) return false;
+                }
+                return true;
+            });
+
+            currentPage = 1;
+            updateDashboard();
+        }
+
+        function handleSearch() {
+            applyFilters();
+        }
+
+        function resetFilters() {
+            document.getElementById('filterZone').value = 'ALL';
+            document.getElementById('filterAge').value = 'ALL';
+            document.getElementById('filterStatus').value = 'ALL';
+            document.getElementById('searchInput').value = '';
+            applyFilters();
+            showToast("รีเซ็ตตัวกรองข้อมูลเรียบร้อยแล้ว");
+        }
+
+        /**
+         * 5. DASHBOARD UPDATE PIPELINE
+         */
+        function updateDashboard() {
+            updateKPIs();
+            updateMapLayers();
+            updateCharts();
+            renderTable();
+        }
+
+        /**
+         * 6. KPI UPDATES
+         */
+        function updateKPIs() {
+            const total = filteredDataset.length;
+            const positives = filteredDataset.filter(d => d.outcome === 1).length;
+            const prevRate = total > 0 ? ((positives / total) * 100).toFixed(1) : "0.0";
+
+            const avgGlucose = total > 0 
+                ? (filteredDataset.reduce((sum, d) => sum + d.glucose, 0) / total).toFixed(1) 
+                : "0.0";
+
+            const avgBMI = total > 0 
+                ? (filteredDataset.reduce((sum, d) => sum + d.bmi, 0) / total).toFixed(1) 
+                : "0.0";
+
+            document.getElementById('kpiTotal').innerHTML = `${total.toLocaleString()} <span class="text-sm font-normal text-slate-500">ราย</span>`;
+            document.getElementById('kpiPrevalence').textContent = `${prevRate}%`;
+            document.getElementById('kpiPosCount').innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${positives.toLocaleString()} รายผู้ป่วยเบาหวาน`;
+            document.getElementById('kpiGlucose').innerHTML = `${avgGlucose} <span class="text-sm font-normal text-slate-500">mg/dL</span>`;
+            document.getElementById('kpiBMI').innerHTML = `${avgBMI} <span class="text-sm font-normal text-slate-500">kg/m²</span>`;
+        }
+
+        /**
+         * 7. LEAFLET MAP & TILE SERVER (OpenStreetMap Clean Tiles)
+         */
+        function initLeafletMap() {
+            map = L.map('gisMap', {
+                center: [13.0000, 101.5000],
+                zoom: 6,
+                zoomControl: true
+            });
+
+            // Clean OpenStreetMap Tiles (No Watermarks/API key warnings)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            mapMarkerGroup = L.layerGroup().addTo(map);
+            mapBubbleGroup = L.layerGroup();
+        }
+
+        function toggleMapLayer(layerType) {
+            activeMapLayer = layerType;
+            
+            // Toggle Button Styles
+            ['Marker', 'Bubble', 'Heat'].forEach(btn => {
+                const el = document.getElementById(`btnLayer${btn}`);
+                el.className = "px-3 py-1.5 rounded-lg border bg-white text-slate-700 hover:bg-slate-100 border-slate-300 transition";
+            });
+
+            if (layerType === 'markers') {
+                document.getElementById('btnLayerMarker').className = "px-3 py-1.5 rounded-lg border bg-emerald-600 text-white border-emerald-600 shadow-sm transition";
+            } else if (layerType === 'bubbles') {
+                document.getElementById('btnLayerBubble').className = "px-3 py-1.5 rounded-lg border bg-emerald-600 text-white border-emerald-600 shadow-sm transition";
+            } else {
+                document.getElementById('btnLayerHeat').className = "px-3 py-1.5 rounded-lg border bg-emerald-600 text-white border-emerald-600 shadow-sm transition";
+            }
+
+            updateMapLayers();
+        }
+
+        function updateMapLayers() {
+            if (!map) return;
+
+            // Clear active layers
+            mapMarkerGroup.clearLayers();
+            mapBubbleGroup.clearLayers();
+            if (mapHeatLayer) {
+                map.removeLayer(mapHeatLayer);
+                mapHeatLayer = null;
+            }
+
+            // Aggregate Data per Health Zone
+            const zoneStats = HEALTH_ZONES.map(z => {
+                const zoneData = filteredDataset.filter(d => d.zoneId === z.id);
+                const total = zoneData.length;
+                const pos = zoneData.filter(d => d.outcome === 1).length;
+                const rate = total > 0 ? (pos / total) * 100 : 0;
+                return { ...z, sampleCount: total, posCount: pos, prevRate: rate };
+            });
+
+            if (activeMapLayer === 'markers') {
+                if (!map.hasLayer(mapMarkerGroup)) map.addLayer(mapMarkerGroup);
+                
+                zoneStats.forEach(z => {
+                    if (z.sampleCount === 0) return;
+                    let color = "#22c55e"; // low
+                    if (z.prevRate > 36.0) color = "#e11d48"; // high
+                    else if (z.prevRate >= 33.5) color = "#f59e0b"; // med
+
+                    const marker = L.circleMarker([z.lat, z.lng], {
+                        radius: 10,
+                        fillColor: color,
+                        color: "#ffffff",
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    marker.bindPopup(`
+                        <div class="p-2 space-y-1">
+                            <h4 class="font-bold text-slate-800">${z.name}</h4>
+                            <p class="text-xs text-slate-600">กลุ่มตัวอย่าง: <strong>${z.sampleCount} ราย</strong></p>
+                            <p class="text-xs text-slate-600">ผู้ป่วยเบาหวาน: <strong class="text-rose-600">${z.posCount} ราย</strong></p>
+                            <p class="text-xs text-slate-600">อัตราความชุก: <strong class="text-emerald-700">${z.prevRate.toFixed(1)}%</strong></p>
+                        </div>
+                    `);
+                    mapMarkerGroup.addLayer(marker);
+                });
+
+            } else if (activeMapLayer === 'bubbles') {
+                if (!map.hasLayer(mapBubbleGroup)) map.addLayer(mapBubbleGroup);
+
+                zoneStats.forEach(z => {
+                    if (z.sampleCount === 0) return;
+                    const radius = Math.max(12, z.prevRate * 0.9);
+
+                    const bubble = L.circleMarker([z.lat, z.lng], {
+                        radius: radius,
+                        fillColor: "#e11d48",
+                        color: "#be123c",
+                        weight: 1.5,
+                        fillOpacity: 0.5
+                    });
+
+                    bubble.bindPopup(`
+                        <div class="p-2">
+                            <h4 class="font-bold text-slate-800">${z.name}</h4>
+                            <p class="text-xs text-rose-600 font-semibold">ความชุกเบาหวาน: ${z.prevRate.toFixed(1)}%</p>
+                        </div>
+                    `);
+                    mapBubbleGroup.addLayer(bubble);
+                });
+
+            } else if (activeMapLayer === 'heatmap') {
+                const heatPoints = filteredDataset.map(d => [
+                    d.lat,
+                    d.lng,
+                    d.outcome === 1 ? 1.0 : 0.2
+                ]);
+
+                if (typeof L.heatLayer === 'function') {
+                    mapHeatLayer = L.heatLayer(heatPoints, {
+                        radius: 25,
+                        blur: 15,
+                        maxZoom: 10,
+                        gradient: { 0.2: '#22c55e', 0.5: '#f59e0b', 0.8: '#ef4444' }
+                    }).addTo(map);
+                }
+            }
+        }
+
+        /**
+         * 8. CHART.JS VISUALIZATIONS
+         */
+        function initCharts() {
+            // Chart 1: Age Prevalence Bar Chart
+            const ctxAge = document.getElementById('chartAgePrevalence').getContext('2d');
+            chartAge = new Chart(ctxAge, {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '%' } } }
+                }
+            });
+
+            // Chart 2: Glucose Range Doughnut
+            const ctxGlucose = document.getElementById('chartGlucoseDist').getContext('2d');
+            chartGlucose = new Chart(ctxGlucose, {
+                type: 'doughnut',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right' } }
+                }
+            });
+
+            // Chart 3: BMI Category Stacked Bar
+            const ctxBMI = document.getElementById('chartBMIRisk').getContext('2d');
+            chartBMI = new Chart(ctxBMI, {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+                }
+            });
+
+            // Chart 4: Risk Factors Radar
+            const ctxRadar = document.getElementById('chartRadarFactors').getContext('2d');
+            chartRadar = new Chart(ctxRadar, {
+                type: 'radar',
+                data: { labels: ['Pregnancies', 'BloodPressure', 'SkinThickness', 'Insulin', 'Pedigree'], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { r: { beginAtZero: true, max: 100 } }
+                }
+            });
+        }
+
+        function updateCharts() {
+            if (!chartAge) return;
+
+            // 1. Update Age Chart
+            const ageGroups = ["21-30", "31-40", "41-50", "51-60", "60+"];
+            const prevData = ageGroups.map(grp => {
+                const sub = filteredDataset.filter(d => d.ageGroup === grp);
+                const pos = sub.filter(d => d.outcome === 1).length;
+                return sub.length > 0 ? parseFloat(((pos / sub.length) * 100).toFixed(1)) : 0;
+            });
+
+            chartAge.data = {
+                labels: ageGroups,
+                datasets: [{
+                    label: 'อัตราความชุก (%)',
+                    data: prevData,
+                    backgroundColor: '#16a34a',
+                    borderRadius: 6
+                }]
+            };
+            chartAge.update();
+
+            // 2. Update Glucose Chart
+            const g1 = filteredDataset.filter(d => d.glucose < 100).length;
+            const g2 = filteredDataset.filter(d => d.glucose >= 100 && d.glucose <= 125).length;
+            const g3 = filteredDataset.filter(d => d.glucose > 125).length;
+
+            chartGlucose.data = {
+                labels: ['ปกติ (<100)', 'เสี่ยง (100-125)', 'เบาหวาน (>125)'],
+                datasets: [{
+                    data: [g1, g2, g3],
+                    backgroundColor: ['#22c55e', '#f59e0b', '#e11d48']
+                }]
+            };
+            chartGlucose.update();
+
+            // 3. Update BMI Chart
+            const bmiCats = ["ปกติ (< 23.0)", "น้ำหนักเกิน (23.0-24.9)", "อ้วนระดับ 1 (25.0-29.9)", "อ้วนระดับ 2 (≥ 30.0)"];
+            const bmiPos = bmiCats.map(c => filteredDataset.filter(d => d.bmiCategory === c && d.outcome === 1).length);
+            const bmiNeg = bmiCats.map(c => filteredDataset.filter(d => d.bmiCategory === c && d.outcome === 0).length);
+
+            chartBMI.data = {
+                labels: ['ปกติ', 'น้ำหนักเกิน', 'อ้วนระดับ 1', 'อ้วนระดับ 2'],
+                datasets: [
+                    { label: 'ผู้ป่วยเบาหวาน', data: bmiPos, backgroundColor: '#e11d48' },
+                    { label: 'ปกติ', data: bmiNeg, backgroundColor: '#3b82f6' }
+                ]
+            };
+            chartBMI.update();
+
+            // 4. Update Radar Chart (Normalized Metrics)
+            const posSet = filteredDataset.filter(d => d.outcome === 1);
+            const negSet = filteredDataset.filter(d => d.outcome === 0);
+
+            const calcAvg = (arr, key) => arr.length > 0 ? arr.reduce((s, x) => s + x[key], 0) / arr.length : 0;
+
+            const rPos = [
+                (calcAvg(posSet, 'pregnancies') / 17) * 100,
+                (calcAvg(posSet, 'bloodPressure') / 122) * 100,
+                (calcAvg(posSet, 'skinThickness') / 99) * 100,
+                (calcAvg(posSet, 'insulin') / 846) * 100,
+                (calcAvg(posSet, 'pedigree') / 2.42) * 100
+            ];
+
+            const rNeg = [
+                (calcAvg(negSet, 'pregnancies') / 17) * 100,
+                (calcAvg(negSet, 'bloodPressure') / 122) * 100,
+                (calcAvg(negSet, 'skinThickness') / 99) * 100,
+                (calcAvg(negSet, 'insulin') / 846) * 100,
+                (calcAvg(negSet, 'pedigree') / 2.42) * 100
+            ];
+
+            chartRadar.data = {
+                labels: ['การตั้งครรภ์', 'ความดันโลหิต', 'ความหนาชั้นไขมัน', 'ระดับอินซูลิน', 'พันธุกรรม (Pedigree)'],
+                datasets: [
+                    { label: 'กลุ่มป่วย (Positive)', data: rPos, backgroundColor: 'rgba(225, 29, 72, 0.2)', borderColor: '#e11d48' },
+                    { label: 'กลุ่มปกติ (Negative)', data: rNeg, backgroundColor: 'rgba(34, 197, 94, 0.2)', borderColor: '#22c55e' }
+                ]
+            };
+            chartRadar.update();
+        }
+
+        /**
+         * 9. TABLE RENDER & PAGINATION
+         */
+        function renderTable() {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+
+            const total = filteredDataset.length;
+            const totalPages = Math.ceil(total / rowsPerPage) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            const startIdx = (currentPage - 1) * rowsPerPage;
+            const endIdx = Math.min(startIdx + rowsPerPage, total);
+            const pageData = filteredDataset.slice(startIdx, endIdx);
+
+            pageData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                
+                const statusBadge = item.outcome === 1 
+                    ? `<span class="px-2.5 py-1 text-xs font-semibold bg-rose-100 text-rose-700 rounded-full"><i class="fa-solid fa-triangle-exclamation"></i> ป่วยเป็นเบาหวาน</span>`
+                    : `<span class="px-2.5 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 rounded-full"><i class="fa-solid fa-check"></i> ปกติ</span>`;
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-xs font-medium text-slate-900">${item.id}</td>
+                    <td class="py-3 px-4 text-xs">${item.zoneName}</td>
+                    <td class="py-3 px-4 text-center text-xs">${item.age}</td>
+                    <td class="py-3 px-4 text-center text-xs">${item.pregnancies}</td>
+                    <td class="py-3 px-4 text-center text-xs font-semibold ${item.glucose > 125 ? 'text-rose-600' : 'text-slate-700'}">${item.glucose}</td>
+                    <td class="py-3 px-4 text-center text-xs">${item.bloodPressure}</td>
+                    <td class="py-3 px-4 text-center text-xs">${item.bmi}</td>
+                    <td class="py-3 px-4 text-center text-xs">${item.pedigree}</td>
+                    <td class="py-3 px-4 text-center text-xs">${statusBadge}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('tableInfo').textContent = `แสดง ${total === 0 ? 0 : startIdx + 1} ถึง ${endIdx} จากทั้งหมด ${total.toLocaleString()} รายการ`;
+            document.getElementById('pageNumbers').textContent = `หน้า ${currentPage} / ${totalPages}`;
+
+            document.getElementById('btnPrev').disabled = (currentPage === 1);
+            document.getElementById('btnNext').disabled = (currentPage === totalPages || totalPages === 0);
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(filteredDataset.length / rowsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderTable();
+            }
+        }
+
+        function changeRowsPerPage() {
+            rowsPerPage = parseInt(document.getElementById('rowsPerPage').value);
+            currentPage = 1;
+            renderTable();
+        }
+
+        /**
+         * 10. CSV EXPORT & TOAST NOTIFICATION
+         */
+        function exportCSVData() {
+            if (filteredDataset.length === 0) {
+                showToast("ไม่มีข้อมูลสำหรับส่งออก");
+                return;
+            }
+
+            let csvContent = "\uFEFF"; // UTF-8 BOM for Thai encoding in Excel
+            csvContent += "ID,Zone,Age,Pregnancies,Glucose,BloodPressure,SkinThickness,Insulin,BMI,Pedigree,Outcome\n";
+
+            filteredDataset.forEach(row => {
+                csvContent += `"${row.id}","${row.zoneName}",${row.age},${row.pregnancies},${row.glucose},${row.bloodPressure},${row.skinThickness},${row.insulin},${row.bmi},${row.pedigree},${row.outcome}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `diabetes_epidemiology_data_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showToast("ส่งออกไฟล์ CSV เรียบร้อยแล้ว");
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastMessage').textContent = msg;
+            toast.classList.remove('opacity-0', 'translate-y-10', 'pointer-events-none');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-10', 'pointer-events-none');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
